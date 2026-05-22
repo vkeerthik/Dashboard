@@ -7,6 +7,6 @@ Thumbs.db
 .idea/
 *.swp
 
-# Logs / misc
+# Logs / deps
 *.log
 node_modules/
