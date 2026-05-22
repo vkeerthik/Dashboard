@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cabot — Projects</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Spline+Sans+Mono:wght@400;500;600&family=Spline+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/styles.css">
+</head>
+<body>
+<div id="nav"></div>
+<div class="wrap">
+  <div class="page-head">
+    <h1>Projects</h1>
+    <p>All active projects — filter, sort, and click any row for full detail.</p>
+  </div>
+
+  <div class="filters">
+    <input type="text" id="search" placeholder="Search project, stack, lead…">
+    <select id="fstatus">
+      <option value="">All statuses</option>
+      <option value="on-track">On Track</option>
+      <option value="at-risk">At Risk</option>
+      <option value="delayed">Delayed</option>
+    </select>
+    <div class="seg">
+      <button data-view="table" class="active">Table</button>
+      <button data-view="cards">Cards</button>
+    </div>
+    <span class="count-note" id="count"></span>
+  </div>
+
+  <div class="panel" id="table-view">
+    <div class="tbl-wrap"><table id="tbl"></table></div>
+  </div>
+  <div id="cards-view" style="display:none"></div>
+
+  <footer>Prototype · sample data. Edit <code>assets/data.js</code> to update.</footer>
+</div>
+
+<script src="assets/data.js"></script>
+<script src="assets/app.js"></script>
+<script>
+mountNav('Projects');
+let sortKey='name', sortDir=1, view='table';
+const cols = [
+  ['name','Project'],['status','Status'],['phase','Phase'],
+  ['team','Team',true],['pct','Progress',true],['timeline','Timeline'],['lead','Lead'],['stack','Stack']
+];
+const val = (p,k)=>({name:p.name,status:statusLabel(p.status),phase:p.phase,team:p.roster.length,
+  pct:p.pct,timeline:monthIndex(p.start),lead:p.lead,stack:p.stack.join(' ')}[k]);
+
+function filtered() {
+  const q = document.getElementById('search').value.toLowerCase();
+  const fs = document.getElementById('fstatus').value;
+  let rows = D.projects.filter(p=>{
+    if(fs && p.status!==fs) return false;
+    if(q){ const hay=(p.name+' '+p.stack.join(' ')+' '+p.lead+' '+p.phase).toLowerCase(); if(!hay.includes(q)) return false; }
+    return true;
+  });
+  rows.sort((a,b)=>{ const x=val(a,sortKey),y=val(b,sortKey);
+    if(typeof x==='number') return (x-y)*sortDir;
+    return (''+x).localeCompare(''+y)*sortDir; });
+  return rows;
+}
+
+function renderTable() {
+  const rows = filtered();
+  document.getElementById('count').textContent = rows.length+' / '+D.projects.length+' projects';
+  const head = `<thead><tr>${cols.map(([k,l,num])=>`<th class="${num?'num':''} ${sortKey===k?'sorted':''}" data-k="${k}">${l} <span class="arrow">${sortKey===k?(sortDir>0?'▲':'▼'):'↕'}</span></th>`).join('')}</tr></thead>`;
+  const body = `<tbody>${rows.map(p=>`<tr class="clickable" onclick="location.href='project.html?p=${encodeURIComponent(p.name)}'">
+    <td><span class="tbl-dot"><span class="dot" style="background:${projColor(p.name)}"></span>${p.name}</span></td>
+    <td>${pill(p.status)}</td><td>${p.phase}</td><td class="num">${p.roster.length}</td>
+    <td><div class="bar-cell"><div class="prog-track"><div class="prog-fill" style="width:${p.pct}%;background:${projColor(p.name)}"></div></div><span class="pf">${p.pct}%</span></div></td>
+    <td style="font-size:12px;color:var(--ink-dim);white-space:nowrap">${fmtMonth(p.start)} – ${fmtMonth(p.end)}</td>
+    <td style="font-size:12.5px">${p.lead}</td>
+    <td><div class="chips">${p.stack.slice(0,3).map(s=>`<span class="chip">${s}</span>`).join('')}${p.stack.length>3?`<span class="chip">+${p.stack.length-3}</span>`:''}</div></td>
+  </tr>`).join('')}</tbody>`;
+  const tbl = document.getElementById('tbl');
+  tbl.innerHTML = head + (rows.length?body:'<tbody><tr><td colspan="8"><div class="empty">No projects match your filters.</div></td></tr></tbody>');
+  tbl.querySelectorAll('th[data-k]').forEach(th=>th.onclick=()=>{
+    const k=th.dataset.k; if(k===sortKey) sortDir*=-1; else {sortKey=k; sortDir=1;} render();
+  });
+}
+
+function renderCards() {
+  const rows = filtered();
+  document.getElementById('count').textContent = rows.length+' / '+D.projects.length+' projects';
+  document.getElementById('cards-view').innerHTML = rows.length ? `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px">${rows.map(p=>`
+    <a class="panel" href="project.html?p=${encodeURIComponent(p.name)}" style="display:block">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <span style="font-family:Fraunces,serif;font-size:19px;font-weight:600"><span class="dot" style="background:${projColor(p.name)};margin-right:7px"></span>${p.name}</span>
+        ${pill(p.status)}
+      </div>
+      <div class="meta-row" style="margin:10px 0">
+        <div class="meta"><div class="m-label">Team</div><div class="m-val">${p.roster.length}</div></div>
+        <div class="meta"><div class="m-label">Phase</div><div class="m-val" style="font-size:14px">${p.phase}</div></div>
+        <div class="meta"><div class="m-label">Done</div><div class="m-val">${p.pct}%</div></div>
+      </div>
+      <div class="chips" style="margin-bottom:12px">${p.stack.map(s=>`<span class="chip">${s}</span>`).join('')}</div>
+      <div style="font-size:12px;color:var(--ink-dim);margin-bottom:6px">${fmtMonth(p.start)} – ${fmtMonth(p.end)} · Lead: ${p.lead}</div>
+      <div class="prog-track"><div class="prog-fill" style="width:${p.pct}%;background:${projColor(p.name)}"></div></div>
+    </a>`).join('')}</div>` : '<div class="panel"><div class="empty">No projects match your filters.</div></div>';
+}
+
+function render(){ view==='table'?renderTable():renderCards(); }
+
+document.getElementById('search').oninput = render;
+document.getElementById('fstatus').onchange = render;
+document.querySelectorAll('.seg button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('.seg button').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active'); view=b.dataset.view;
+  document.getElementById('table-view').style.display = view==='table'?'block':'none';
+  document.getElementById('cards-view').style.display = view==='cards'?'block':'none';
+  render();
+});
+render();
+</script>
+</body>
+</html>

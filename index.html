@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cabot — Overview</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Spline+Sans+Mono:wght@400;500;600&family=Spline+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/styles.css">
+</head>
+<body>
+<div id="nav"></div>
+<div class="wrap">
+  <div class="page-head">
+    <h1>Company Overview</h1>
+    <p>High-level capacity and portfolio health — sample data, <span id="asof"></span></p>
+  </div>
+
+  <div class="kpis" id="kpis"></div>
+
+  <div class="section-h"><h2>Needs Attention</h2><span class="hint">where to look first</span></div>
+  <div class="attn" id="attn"></div>
+
+  <div class="section-h"><h2>Portfolio</h2><span class="hint">headcount per project · click through for detail</span></div>
+  <div class="cols">
+    <div class="panel">
+      <h3>Headcount by Project</h3>
+      <div class="ph-sub">How the allocated workforce is distributed</div>
+      <div id="hc-bars"></div>
+    </div>
+    <div class="panel">
+      <h3>Workforce Split</h3>
+      <div class="ph-sub">Allocated vs. available</div>
+      <div style="display:flex;align-items:center;gap:22px">
+        <div id="donut"></div>
+        <div class="legend" id="donut-legend" style="flex:1"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-h"><h2>Project Status</h2><span class="hint"><a href="projects.html" style="color:var(--cabot-cyan-dark)">open Projects tab →</a></span></div>
+  <div class="panel">
+    <div class="tbl-wrap"><table id="status-tbl"></table></div>
+  </div>
+
+  <footer>Prototype · sample data. Single source of truth: <code>assets/data.js</code>. Edit there and every page updates.</footer>
+</div>
+
+<script src="assets/data.js"></script>
+<script src="assets/app.js"></script>
+<script>
+mountNav('Overview');
+document.getElementById('asof').textContent = D.meta.cycle + ' ' + D.meta.asOf;
+const st = companyStats();
+
+document.getElementById('kpis').innerHTML = [
+  ['Total Employees', st.total, 'across '+st.projects+' active projects','var(--cabot-cyan)'],
+  ['Allocated', st.allocated+' <small>/ '+st.total+'</small>', Math.round(st.allocated/st.total*100)+'% staffed','var(--green)'],
+  ['Free / Bench', st.free, 'available now','var(--amber)'],
+  ['Avg Utilization', st.avgUtil+'<small>%</small>', 'target 75–90%','var(--violet)'],
+  ['Active Projects', st.projects, st.byStatus['on-track']+' on track · '+(st.byStatus['at-risk']+st.byStatus['delayed'])+' flagged','var(--teal)'],
+].map(([l,v,s,c])=>`<div class="kpi" style="--bar:${c}"><div class="label">${l}</div><div class="val">${v}</div><div class="sub">${s}</div></div>`).join('');
+
+document.getElementById('attn').innerHTML = [
+  ['Over-allocated', st.over, 'people above 100% capacity','var(--red)'],
+  ['Projects flagged', st.byStatus['at-risk']+st.byStatus['delayed'], st.byStatus['at-risk']+' at risk · '+st.byStatus['delayed']+' delayed','var(--amber)'],
+  ['Free + freeing up', st.freeingSoon, 'people to reassign soon','var(--green)'],
+].map(([t,v,d,c])=>`<div class="attn-card" style="--c:${c}"><div class="at">${t}</div><div class="av">${v}</div><div class="ad">${d}</div></div>`).join('');
+
+// headcount bars
+const maxHc = Math.max(...D.projects.map(p=>p.roster.length));
+document.getElementById('hc-bars').innerHTML = D.projects.slice().sort((a,b)=>b.roster.length-a.roster.length).map(p=>{
+  const w = p.roster.length/maxHc*100;
+  return `<div style="display:grid;grid-template-columns:110px 1fr 28px;gap:10px;align-items:center;margin-bottom:9px">
+    <a href="project.html?p=${encodeURIComponent(p.name)}" style="font-size:12.5px;font-weight:500">${p.name}</a>
+    <div class="prog-track" style="height:14px"><div class="prog-fill" style="width:${w}%;background:${projColor(p.name)}"></div></div>
+    <span style="font-family:'Spline Sans Mono',monospace;font-size:12px;text-align:right">${p.roster.length}</span>
+  </div>`;
+}).join('');
+
+// donut
+const segs = [
+  ...D.projects.map(p=>({label:p.name,value:p.roster.length,color:projColor(p.name)})),
+  {label:'Free / Bench',value:st.free,color:'var(--ink-faint)'}
+];
+document.getElementById('donut').innerHTML = donut(segs, st.total, 'people');
+document.getElementById('donut-legend').innerHTML = [
+  {label:'Allocated',value:st.allocated,color:'var(--cabot-cyan)'},
+  {label:'Free / Bench',value:st.free,color:'var(--ink-faint)'},
+].map(s=>`<div class="legend-item"><span class="lk" style="background:${s.color}"></span><span class="ln">${s.label}</span><span class="lv">${s.value}</span></div>`).join('')
++ `<div style="font-size:11.5px;color:var(--ink-faint);margin-top:6px">Spread across ${st.projects} projects</div>`;
+
+// status table
+const stbl = document.getElementById('status-tbl');
+stbl.innerHTML = `<thead><tr><th>Project</th><th>Status</th><th>Phase</th><th class="num">Team</th><th>Progress</th><th>Timeline</th></tr></thead>
+<tbody>${D.projects.map(p=>`<tr class="clickable" onclick="location.href='project.html?p=${encodeURIComponent(p.name)}'">
+  <td><span class="tbl-dot"><span class="dot" style="background:${projColor(p.name)}"></span>${p.name}</span></td>
+  <td>${pill(p.status)}</td><td>${p.phase}</td><td class="num">${p.roster.length}</td>
+  <td><div class="bar-cell"><div class="prog-track"><div class="prog-fill" style="width:${p.pct}%;background:${projColor(p.name)}"></div></div><span class="pf">${p.pct}%</span></div></td>
+  <td style="font-size:12px;color:var(--ink-dim)">${fmtMonth(p.start)} – ${fmtMonth(p.end)}</td>
+</tr>`).join('')}</tbody>`;
+</script>
+</body>
+</html>

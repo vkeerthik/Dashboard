@@ -1,36 +1,35 @@
 # Cabot Resource Dashboard
 
-A single-page, self-contained resource allocation & capacity dashboard for Cabot.
-No build step, no dependencies — pure HTML/CSS. Open `index.html` in any browser.
+A multi-page, self-contained resource-allocation dashboard for Cabot.
+No build step, no dependencies, no backend — just static HTML/CSS/JS.
+All three views read from **one data file**, so you update numbers in a single place.
 
-> **Note:** All figures are **sample/prototype data**. Replace with real numbers
-> directly in `index.html` (see "Editing the data" below).
+> All figures are **sample/prototype data** (110 people, 13 projects). Replace with
+> your real roster in `assets/data.js` — every page updates automatically.
 
-## What's inside
+## Pages
 
-- Company KPIs — total employees, allocated, free/bench, avg utilization, active projects
-- Project cards — RXlive, PacIQ, OrthoSkool (headcount, roles, tech stack, timeline, status)
-- Gantt timeline across the calendar year
-- Resource-distribution donut
-- Per-person utilization bars + company capacity gauge
-- Available (free / freeing-up) resources with skills
-- Summary table
+| File | View | What it answers |
+|------|------|-----------------|
+| `index.html` | **Overview** | How are we doing company-wide? KPIs, attention strip, headcount per project, status table. |
+| `projects.html` | **Projects** | What's happening across the portfolio? Sortable/filterable table + card view. |
+| `project.html` | **Project detail** | One project in depth (opens via `?p=ProjectName`): Gantt, roles, stack, full roster. |
+| `resources.html` | **Resources** | Who's free, who's overloaded? Available-to-assign cards + filterable people table. |
+
+A shared top nav links all pages together.
 
 ## Run locally
 
-Just open the file:
+Because the pages load `assets/data.js` and each other, serve over HTTP (don't just
+double-click — some browsers block local file scripts):
 
 ```bash
-open index.html        # macOS
-# or double-click index.html
-```
-
-Or serve it (optional):
-
-```bash
+cd cabot-app
 python3 -m http.server 8000
 # visit http://localhost:8000
 ```
+
+(Opening `index.html` directly works in most browsers too, but a local server is safest.)
 
 ## Deploy as static pages
 
@@ -38,38 +37,67 @@ python3 -m http.server 8000
 ```bash
 git init
 git add .
-git commit -m "Cabot dashboard prototype"
+git commit -m "Cabot dashboard"
 git branch -M main
 git remote add origin <your-repo-url>
 git push -u origin main
 ```
-Then in the repo: **Settings -> Pages -> Source: deploy from branch -> `main` / root**.
-Your site goes live at `https://<user>.github.io/<repo>/`.
+Repo → **Settings → Pages → Source: Deploy from a branch → `main` / root**.
+Live at `https://<user>.github.io/<repo>/`. (Repo must be public on the free plan.)
 
 ### Netlify / Vercel / Cloudflare Pages
-Point the project at this folder. No build command needed; publish directory is the root.
+Point at this folder, no build command, publish directory = root.
 
-## Editing the data
+## Editing the data — the only file you need
 
-Open `index.html` and edit values inline. Sections are clearly labelled:
+Everything lives in **`assets/data.js`** as one object: `window.CABOT_DATA`.
 
-- **KPIs** — search for `<!-- KPIs -->`
-- **Projects** — search for `<!-- Projects -->` (one `.pcard` block per project)
-- **Gantt** — search for `<!-- Timeline + Distribution -->`; bar position uses
-  `left` / `width` percentages across a 12-month (Jan–Dec) scale
-- **Utilization** — search for `<!-- Utilization -->`
-- **Free resources** — search for `<!-- Free resources -->`
-- **Summary table** — search for `<!-- Summary table -->`
-
-### Brand colors
-All colors are CSS variables at the top of the `<style>` block:
-
-```css
---cabot-cyan: #2EB8E6;   /* primary brand accent */
---bg:         #f4efe6;   /* beige page background */
---panel:      #ffffff;   /* card background */
---rx / --pac / --ortho   /* per-project colors */
+```js
+window.CABOT_DATA = {
+  projects: [
+    { name:"RXlive", status:"on-track", phase:"Build",
+      stack:["React","Node.js","AWS"], start:"2026-01", end:"2026-09",
+      pct:62, roster:["p001","p014",...], lead:"S. Okafor" }
+    // ...
+  ],
+  people: [
+    { id:"p001", name:"A. Mehta", role:"Sr. Backend",
+      skills:["Node.js","Go"],
+      allocations:[ {project:"PacIQ", pct:95} ],  // empty array = on the bench
+      available:null }   // null = free now (if on bench) ; "2026-06-01" = frees up that date
+    // ...
+  ],
+  meta: { asOf:"2026-05", cycle:"Q2", company:"Cabot" }
+};
 ```
 
-## License / use
-Internal prototype for Cabot. Sample data only.
+Rules the pages rely on:
+- **`status`** must be one of `on-track`, `at-risk`, `delayed`.
+- **`roster`** is a list of person `id`s; headcounts and rosters compute from it.
+- **`allocations[].pct`** drives utilization. Total >100 = over-allocated (red),
+  75–100 = healthy (green), <75 = under-utilized (amber).
+- **`available`**: `null` = free now (if no allocations) ; a date string = freeing up then.
+- **Dates** are `"YYYY-MM"`. The Gantt uses a Jan–Dec 2026 scale.
+
+Add or remove a project/person by editing this one file — no HTML changes needed.
+
+## Theming
+
+Colors are CSS variables at the top of `assets/styles.css`:
+```css
+--cabot-cyan: #2EB8E6;   /* brand accent */
+--bg:         #f4efe6;   /* beige background */
+--panel:      #ffffff;   /* cards */
+```
+Project bar/donut colors rotate through a palette in `assets/app.js` (`projColor`).
+
+## Files
+```
+index.html        Overview
+projects.html     Projects list
+project.html      Single-project detail
+resources.html    People / allocation
+assets/data.js    ← single source of truth (edit this)
+assets/styles.css shared theme
+assets/app.js     shared logic & renderers
+```

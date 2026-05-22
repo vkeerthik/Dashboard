@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cabot — Resources</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Spline+Sans+Mono:wght@400;500;600&family=Spline+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/styles.css">
+</head>
+<body>
+<div id="nav"></div>
+<div class="wrap">
+  <div class="page-head">
+    <h1>Resources</h1>
+    <p>Who's allocated, who's overloaded, and who's available to assign.</p>
+  </div>
+
+  <div class="kpis" id="kpis" style="grid-template-columns:repeat(4,1fr)"></div>
+
+  <div class="section-h"><h2>Available to Assign</h2><span class="hint" id="avail-count"></span></div>
+  <div class="panel"><div class="free-grid" id="free-grid"></div></div>
+
+  <div class="section-h"><h2>All People</h2><span class="hint">filter and sort the full roster</span></div>
+  <div class="filters">
+    <input type="text" id="search" placeholder="Search name, role, skill…">
+    <select id="favail">
+      <option value="">All availability</option>
+      <option value="free">Free now</option>
+      <option value="soon">Freeing up soon</option>
+      <option value="allocated">Fully allocated</option>
+    </select>
+    <select id="fproject"><option value="">All projects</option></select>
+    <select id="futil">
+      <option value="">All utilization</option>
+      <option value="over">Over-allocated (&gt;100%)</option>
+      <option value="healthy">Healthy (75–100%)</option>
+      <option value="under">Under-utilized (&lt;75%)</option>
+    </select>
+    <span class="count-note" id="count"></span>
+  </div>
+  <div class="panel"><div class="tbl-wrap"><table id="tbl"></table></div></div>
+
+  <footer>Prototype · sample data. Edit <code>assets/data.js</code> to update.</footer>
+</div>
+
+<script src="assets/data.js"></script>
+<script src="assets/app.js"></script>
+<script>
+mountNav('Resources');
+const st = companyStats();
+let sortKey='name', sortDir=1;
+
+document.getElementById('kpis').innerHTML = [
+  ['Total People', st.total, 'company-wide','var(--cabot-cyan)'],
+  ['Free Now', st.free, 'on the bench','var(--green)'],
+  ['Over-allocated', st.over, 'above 100% capacity','var(--red)'],
+  ['Avg Utilization', st.avgUtil+'<small>%</small>', 'of allocated staff','var(--violet)'],
+].map(([l,v,s,c])=>`<div class="kpi" style="--bar:${c}"><div class="label">${l}</div><div class="val">${v}</div><div class="sub">${s}</div></div>`).join('');
+
+// project filter options
+document.getElementById('fproject').innerHTML += D.projects.map(p=>`<option value="${p.name}">${p.name}</option>`).join('');
+
+// available cards (free now + freeing up soon)
+const freeNow = D.people.filter(isFreeNow).map(p=>({p,soon:false}));
+const soon = D.people.filter(p=>isAllocated(p)&&p.available).map(p=>({p,soon:true}));
+const avail = [...freeNow, ...soon];
+document.getElementById('avail-count').textContent = freeNow.length+' free now · '+soon.length+' freeing up soon';
+document.getElementById('free-grid').innerHTML = avail.map(({p,soon})=>{
+  const badge = soon ? `<span class="free-badge soon">${fmtMonth(p.available)}</span>` : `<span class="free-badge">FREE NOW</span>`;
+  const avtext = soon ? 'Frees up '+fmtMonth(p.available) : 'Available now';
+  return `<div class="free-card ${soon?'soon':''}">
+    <div class="fc-top"><div><div class="fc-name">${p.name}</div><div class="fc-role">${p.role}</div></div>${badge}</div>
+    <div class="chips">${p.skills.map(s=>`<span class="chip">${s}</span>`).join('')}</div>
+    <div class="fc-avail">${avtext}${soon?'':' · 100%'}</div>
+  </div>`;
+}).join('') || '<div class="empty">Everyone is fully allocated.</div>';
+
+// people table
+const cols=[['name','Name'],['role','Role'],['projects','Projects'],['util','Load',true],['avail','Status'],['skills','Skills']];
+const val=(p,k)=>({name:p.name,role:p.role,projects:p.allocations.map(a=>a.project).join(', ')||'—',
+  util:totalAlloc(p),avail:isFreeNow(p)?0:(p.available?1:2),skills:p.skills.join(' ')}[k]);
+
+function filtered(){
+  const q=document.getElementById('search').value.toLowerCase();
+  const fa=document.getElementById('favail').value;
+  const fp=document.getElementById('fproject').value;
+  const fu=document.getElementById('futil').value;
+  let rows=D.people.filter(p=>{
+    if(q){const hay=(p.name+' '+p.role+' '+p.skills.join(' ')+' '+p.allocations.map(a=>a.project).join(' ')).toLowerCase(); if(!hay.includes(q))return false;}
+    if(fa==='free'&&!isFreeNow(p))return false;
+    if(fa==='soon'&&!(isAllocated(p)&&p.available))return false;
+    if(fa==='allocated'&&(!isAllocated(p)||p.available))return false;
+    if(fp&&!p.allocations.some(a=>a.project===fp))return false;
+    const tot=totalAlloc(p);
+    if(fu==='over'&&!(tot>100))return false;
+    if(fu==='healthy'&&!(tot>=75&&tot<=100))return false;
+    if(fu==='under'&&!(isAllocated(p)&&tot<75))return false;
+    return true;
+  });
+  rows.sort((a,b)=>{const x=val(a,sortKey),y=val(b,sortKey);
+    if(typeof x==='number')return(x-y)*sortDir; return(''+x).localeCompare(''+y)*sortDir;});
+  return rows;
+}
+
+function render(){
+  const rows=filtered();
+  document.getElementById('count').textContent=rows.length+' / '+D.people.length+' people';
+  const head=`<thead><tr>${cols.map(([k,l,num])=>`<th class="${num?'num':''} ${sortKey===k?'sorted':''}" data-k="${k}">${l} <span class="arrow">${sortKey===k?(sortDir>0?'▲':'▼'):'↕'}</span></th>`).join('')}</tr></thead>`;
+  const body=`<tbody>${rows.map(p=>{
+    const tot=totalAlloc(p);
+    const statusTxt = isFreeNow(p)?`<span class="status s-on-track">Free now</span>`
+      : p.available?`<span class="status s-at-risk">Frees ${fmtMonth(p.available)}</span>`
+      : `<span class="status" style="background:var(--panel-2);color:var(--ink-dim)">Allocated</span>`;
+    const projs = p.allocations.length?p.allocations.map(a=>`<a href="project.html?p=${encodeURIComponent(a.project)}" style="color:var(--cabot-cyan-dark)">${a.project}</a> <span style="color:var(--ink-faint);font-family:'Spline Sans Mono',monospace;font-size:11px">${a.pct}%</span>`).join('<br>') : '<span style="color:var(--ink-faint)">—</span>';
+    return `<tr>
+      <td style="font-weight:500">${p.name}</td><td style="color:var(--ink-dim)">${p.role}</td>
+      <td style="font-size:12px">${projs}</td>
+      <td><div class="bar-cell"><div class="prog-track"><div class="prog-fill" style="width:${Math.min(tot,100)}%;background:${tot===0?'var(--ink-faint)':utilColor(tot)}"></div></div><span class="pf" style="color:${tot===0?'var(--ink-faint)':utilColor(tot)}">${tot}%</span></div></td>
+      <td>${statusTxt}</td>
+      <td><div class="chips">${p.skills.map(s=>`<span class="chip">${s}</span>`).join('')}</div></td>
+    </tr>`;}).join('')}</tbody>`;
+  const tbl=document.getElementById('tbl');
+  tbl.innerHTML=head+(rows.length?body:'<tbody><tr><td colspan="6"><div class="empty">No people match your filters.</div></td></tr></tbody>');
+  tbl.querySelectorAll('th[data-k]').forEach(th=>th.onclick=()=>{const k=th.dataset.k; if(k===sortKey)sortDir*=-1; else{sortKey=k;sortDir=1;} render();});
+}
+['search','favail','fproject','futil'].forEach(id=>{const e=document.getElementById(id); e.oninput=render; e.onchange=render;});
+render();
+</script>
+</body>
+</html>

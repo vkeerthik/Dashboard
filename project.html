@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cabot — Project</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Spline+Sans+Mono:wght@400;500;600&family=Spline+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/styles.css">
+</head>
+<body>
+<div id="nav"></div>
+<div class="wrap">
+  <a class="back-link" href="projects.html">← All projects</a>
+  <div id="content"></div>
+  <footer>Prototype · sample data. Edit <code>assets/data.js</code> to update.</footer>
+</div>
+
+<script src="assets/data.js"></script>
+<script src="assets/app.js"></script>
+<script>
+mountNav('Projects');
+const pname = new URLSearchParams(location.search).get('p');
+const p = D.projects.find(x=>x.name===pname);
+const el = document.getElementById('content');
+
+if(!p){ el.innerHTML = '<div class="panel"><div class="empty">Project not found. <a href="projects.html" style="color:var(--cabot-cyan-dark)">Back to projects</a></div></div>'; }
+else {
+  const col = projColor(p.name);
+  const team = p.roster.map(byId);
+  // role breakdown
+  const roleCounts = {};
+  team.forEach(t=>roleCounts[t.role]=(roleCounts[t.role]||0)+1);
+  // gantt geometry (12 month scale, Jan2026..Dec2026; clamp)
+  const s=Math.max(0,monthIndex(p.start)), e=Math.min(12,monthIndex(p.end)+1);
+  const left=s/12*100, width=(e-s)/12*100;
+  const todayPct = (4.5/12*100); // mid-May
+
+  el.innerHTML = `
+  <div class="page-head" style="display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:12px">
+    <div><h1><span class="dot" style="background:${col};width:12px;height:12px;margin-right:10px"></span>${p.name}</h1>
+    <p>Lead: ${p.lead} · Phase: ${p.phase}</p></div>
+    ${pill(p.status)}
+  </div>
+
+  <div class="meta-row">
+    <div class="meta"><div class="m-label">Team size</div><div class="m-val">${p.roster.length}</div></div>
+    <div class="meta"><div class="m-label">Progress</div><div class="m-val">${p.pct}%</div></div>
+    <div class="meta"><div class="m-label">Start</div><div class="m-val" style="font-size:15px">${fmtMonth(p.start)}</div></div>
+    <div class="meta"><div class="m-label">Target end</div><div class="m-val" style="font-size:15px">${fmtMonth(p.end)}</div></div>
+  </div>
+
+  <div class="cols">
+    <div class="panel">
+      <h3>Timeline</h3><div class="ph-sub">Across the 2026 calendar year</div>
+      <div class="gantt">
+        <div class="gantt-months"><span></span><div class="gantt-scale">${['J','F','M','A','M','J','J','A','S','O','N','D'].map(m=>`<span>${m}</span>`).join('')}</div></div>
+        <div class="gantt-row"><div class="gantt-label">${p.name}<small>${p.phase} · ${p.pct}%</small></div>
+          <div class="gantt-track"><div class="today-line" style="left:${todayPct}%"></div>
+            <div class="gantt-bar" style="left:${left}%;width:${width}%;background:${col}"><div class="done" style="width:${p.pct}%"></div>${fmtMonth(p.start)} – ${fmtMonth(p.end)}</div>
+          </div></div>
+      </div>
+      <h3 style="margin-top:22px">Tech Stack</h3><div class="ph-sub">Primary technologies</div>
+      <div class="chips">${p.stack.map(s=>`<span class="chip">${s}</span>`).join('')}</div>
+    </div>
+    <div class="panel">
+      <h3>Role Breakdown</h3><div class="ph-sub">${p.roster.length} people on this project</div>
+      ${Object.entries(roleCounts).sort((a,b)=>b[1]-a[1]).map(([r,c])=>`
+        <div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--line);font-size:13px">
+          <span style="color:var(--ink-dim)">${r}</span><span style="font-family:'Spline Sans Mono',monospace;font-weight:600">${c}</span>
+        </div>`).join('')}
+    </div>
+  </div>
+
+  <div class="section-h"><h2>Team Roster</h2><span class="hint">${p.roster.length} people · allocation on this project</span></div>
+  <div class="panel"><div class="tbl-wrap"><table>
+    <thead><tr><th>Name</th><th>Role</th><th class="num">Alloc %</th><th>Total load</th><th>Skills</th></tr></thead>
+    <tbody>${team.map(t=>{
+      const here = t.allocations.find(a=>a.project===p.name).pct;
+      const tot = totalAlloc(t);
+      return `<tr>
+        <td style="font-weight:500">${t.name}</td><td style="color:var(--ink-dim)">${t.role}</td>
+        <td class="num">${here}%</td>
+        <td><div class="bar-cell"><div class="prog-track"><div class="prog-fill" style="width:${Math.min(tot,100)}%;background:${utilColor(tot)}"></div></div><span class="pf" style="color:${utilColor(tot)}">${tot}%</span></div></td>
+        <td><div class="chips">${t.skills.map(s=>`<span class="chip">${s}</span>`).join('')}</div></td>
+      </tr>`;}).join('')}</tbody>
+  </table></div></div>`;
+}
+</script>
+</body>
+</html>
